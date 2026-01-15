@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://schema.zeabur.app/template.json  
+apiVersion: zeabur.com/v1  
+kind: Template  
+metadata:  
+    name: v2ray  
+spec:  
+    description: A platform for studying.  
+    icon: https://raw.githubusercontent.com/2dust/v2rayN/refs/heads/master/v2rayN/v2rayN/Resources/v2rayN.ico  
+    variables:  
+        - key: Nginx_DOMAIN  
+          type: DOMAIN  
+          name: Nginx Domain  
+          description: The domain name of Nginx.  
+        - key: USER_PATH  
+          type: STRING  
+          name: WS Path  
+          default: /ws  
+        - key: USER_ID  
+          type: STRING  
+          name: USER ID  
+          default: 1d02e715-33f4-4f38-b188-3c9efb9a7b7c  
+    services:  
+        - name: v2ray  
+          icon: https://raw.githubusercontent.com/2dust/v2rayN/refs/heads/master/v2rayN/v2rayN/Resources/v2rayN.ico  
+          template: PREBUILT_V2  
+          spec:  
+            source:  
+                image: teddysun/v2ray:latest  
+            ports:  
+                - id: port  
+                  port: 1080  
+                  type: HTTP  
+            configs:  
+                - path: /etc/v2ray/config.json  
+                  template: |-  
+                    {  
+                      "inbounds": [  
+                        {  
+                          "port": 1080,  
+                          "protocol": "vmess",  
+                          "settings": {  
+                            "clients": [  
+                              {  
+                                "id": "${USER_ID}",  
+                                "alterId": 0  
+                              }  
+                            ]  
+                          },  
+                          "streamSettings": {  
+                            "network": "ws",  
+                            "wsSettings": {  
+                              "path": "${USER_PATH}"  
+                            }  
+                          }  
+                        }  
+                      ],  
+                      "outbounds": [  
+                        {  
+                          "protocol": "freedom"  
+                        }  
+                      ]  
+                    }  
+                  permission: null  
+                  envsubst: true  
+        - name: Nginx  
+          icon: https://www.svgrepo.com/show/373924/nginx.svg  
+          template: PREBUILT_V2  
+          spec:  
+            source:  
+                image: library/nginx:1.27  
+            ports:  
+                - id: web  
+                  port: 80  
+                  type: HTTP  
+            volumes:  
+                - id: html  
+                  dir: /usr/share/nginx/html  
+            configs:  
+                - path: /etc/nginx/nginx.conf  
+                  template: |-  
+                    worker_processes  5;  
+                    error_log  stderr;  
+                    worker_rlimit_nofile 8192;  
+                    events {}  
+                    http {  
+                        default_type application/octet-stream;  
+                        log_format   main '$remote_addr - $remote_user [$time_local]  $status '  
+                            '"$request" $body_bytes_sent "$http_referer" '  
+                            '"$http_user_agent" "$http_x_forwarded_for"';  
+                        access_log   /dev/stdout  main;  
+                        sendfile     on;  
+                        tcp_nopush   on;  
+                        server_names_hash_bucket_size 128;  
+                        server {  
+                            listen 80;  
+                            server_name _;  
+                            location / {  
+                                root /usr/share/nginx/html;  
+                                index index.html index.htm;  
+                            }  
+                            location "${USER_PATH}" {  
+                                proxy_redirect off;  
+                                proxy_pass http://v2ray.zeabur.internal:1080;  
+                                proxy_http_version 1.1;  
+                                proxy_set_header Upgrade $http_upgrade;  
+                                proxy_set_header Connection "upgrade";  
+                                proxy_set_header Host $http_host;  
+                                proxy_set_header X-Real-IP $remote_addr;  
+                                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
+                            }  
+                        }  
+                    }  
+                  permission: null  
+                  envsubst: true  
+          domainKey: Nginx_DOMAIN  
